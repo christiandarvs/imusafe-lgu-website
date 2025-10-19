@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ImuSafe Dashboard</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script type="module" src="./app.js"></script>
+    <style>
+      body {
+        font-family: "Poppins", sans-serif;
+      }
+      .title-bar {
+        background-color: #12a658;
+        color: white;
+        padding: 15px 0;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0;
+      }
+      .latest-report {
+        background-color: #ffffcc;
+        border: 2px solid #f1c40f;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      class="title-bar d-flex justify-content-between align-items-center px-3"
+    >
+      <span>ImuSafe Dashboard</span>
+      <button id="logoutBtn" class="btn btn-light btn-sm">Logout</button>
+    </div>
+
+    <div class="container mt-4">
+      <div class="row text-center" id="analytics-cards">
+        <div class="col-md-3 mb-3">
+          <div class="card shadow-sm border-0">
+            <div class="card-body">
+              <h6 class="text-muted">📊 Total Reports</h6>
+              <h3 id="totalReports">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card shadow-sm border-0">
+            <div class="card-body">
+              <h6 class="text-muted">✅ Verified</h6>
+              <h3 id="verifiedReports">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card shadow-sm border-0">
+            <div class="card-body">
+              <h6 class="text-muted">❌ Unverified</h6>
+              <h3 id="unverifiedReports">0</h3>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3 mb-3">
+          <div class="card shadow-sm border-0">
+            <div class="card-body">
+              <h6 class="text-muted">👤 Unique Users</h6>
+              <h3 id="uniqueUsers">0</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container mt-4">
+      <div class="accordion" id="reportAccordion">
+        <!-- Latest Report -->
+        <div class="accordion-item latest-report">
+          <h2 class="accordion-header" id="headingLatest">
+            <button
+              class="accordion-button"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapseLatest"
+              aria-expanded="true"
+              aria-controls="collapseLatest"
+            >
+              🚨 Latest Report
+            </button>
+          </h2>
+          <div
+            id="collapseLatest"
+            class="accordion-collapse collapse show"
+            aria-labelledby="headingLatest"
+            data-bs-parent="#reportAccordion"
+          >
+            <div class="accordion-body" id="latest-report-data">
+              Loading latest report...
+            </div>
+          </div>
+        </div>
+
+        <!-- All Reports -->
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingAll">
+            <button
+              class="accordion-button collapsed"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapseAll"
+              aria-expanded="false"
+              aria-controls="collapseAll"
+            >
+              📋 All Reports
+            </button>
+          </h2>
+          <div
+            id="collapseAll"
+            class="accordion-collapse collapse"
+            aria-labelledby="headingAll"
+            data-bs-parent="#reportAccordion"
+          >
+            <div class="accordion-body">
+              <!-- 🔍 Search Bar -->
+              <input
+                type="text"
+                id="searchInput"
+                class="form-control mb-3"
+                placeholder="🔍 Search reports (location, email, phone, user ID)..."
+              />
+              <div id="all-reports-data">Loading...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container mt-4">
+      <!-- Debug/Test Button -->
+      <button id="simulateBtn" class="btn btn-danger mb-3">
+        🚨 Simulate New Report
+      </button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

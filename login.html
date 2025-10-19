@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ImuSafe LGU Login</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="login.css" />
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        GoogleAuthProvider,
+        signInWithPopup,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyC491Y7_dxqrIGek4Yv9tw1sNu-C3yh5rk",
+        authDomain: "imusafe-official.firebaseapp.com",
+        projectId: "imusafe-official",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const errorMsg = document.getElementById("error-msg");
+
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          if (user.email === "imusafeofficial@gmail.com") {
+            window.location.href = "index.html";
+          } else {
+            errorMsg.textContent = "Unauthorized account.";
+            signOut(auth);
+          }
+        }
+      });
+
+      async function googleLogin() {
+        const provider = new GoogleAuthProvider();
+        try {
+          const result = await signInWithPopup(auth, provider);
+          const user = result.user;
+
+          if (user.email === "imusafeofficial@gmail.com") {
+            window.location.href = "index.html";
+          } else {
+            errorMsg.textContent = "Unauthorized account.";
+            await signOut(auth);
+          }
+        } catch (error) {
+          errorMsg.textContent = "Google login failed.";
+          console.error(error);
+        }
+      }
+
+      // Attach Google login
+      window.addEventListener("DOMContentLoaded", () => {
+        document
+          .getElementById("googleLoginBtn")
+          .addEventListener("click", googleLogin);
+      });
+    </script>
+  </head>
+  <body>
+    <div class="login-box">
+      <h2>LGU Login</h2>
+      <button id="googleLoginBtn">Login with Google</button>
+      <div id="error-msg" class="error"></div>
+    </div>
+  </body>
+</html>

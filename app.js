@@ -33,8 +33,12 @@ onAuthStateChanged(auth, (user) => {
     console.log("Unauthorized — redirecting to login.");
     signOut(auth).catch((e) => console.warn("signOut error:", e));
     window.location.replace("login.html");
+  } else {
+    console.log("✅ Authorized — starting listener");
+    startListeningReports();
   }
 });
+
 
 // Audio alerts
 const alertSound = new Audio("accident-notification.wav");

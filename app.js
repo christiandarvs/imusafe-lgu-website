@@ -6,6 +6,8 @@ import {
   Timestamp,
   addDoc,
   serverTimestamp,
+  deleteDoc,
+  doc,
 } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 import {
   getAuth,
@@ -39,21 +41,89 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-
 // Audio alerts
 const alertSound = new Audio("accident-notification.wav");
 let lastSeenTimestamp = 0;
 let allReports = [];
+let severityChart;
+
 function updateAnalytics(reports) {
   const total = reports.length;
   const verified = reports.filter((r) => r.verifiedByModel).length;
   const unverified = total - verified;
   const uniqueUsers = new Set(reports.map((r) => r.userId)).size;
 
+  const minor = reports.filter(
+    (r) => (r.severity || "").toLowerCase() === "minor"
+  ).length;
+  const moderate = reports.filter(
+    (r) => (r.severity || "").toLowerCase() === "moderate"
+  ).length;
+  const severe = reports.filter(
+    (r) => (r.severity || "").toLowerCase() === "severe"
+  ).length;
+
+  // Update text counters
   document.getElementById("totalReports").textContent = total;
   document.getElementById("verifiedReports").textContent = verified;
   document.getElementById("unverifiedReports").textContent = unverified;
   document.getElementById("uniqueUsers").textContent = uniqueUsers;
+
+  // 🎨 Update severity chart
+  const ctx = document.getElementById("severityChart").getContext("2d");
+  const data = {
+    labels: ["Minor", "Moderate", "Severe"],
+    datasets: [
+      {
+        label: "Accidents",
+        data: [minor, moderate, severe],
+        backgroundColor: ["#28a745", "#ffc107", "#dc3545"],
+        borderColor: "#fff",
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  if (severityChart) {
+    // Update existing chart
+    severityChart.data = data;
+    severityChart.update();
+  } else {
+    // Create chart initially
+    severityChart = new Chart(ctx, {
+      type: "pie",
+      data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        layout: {
+          padding: 20,
+        },
+        plugins: {
+          legend: {
+            position: "bottom",
+            onClick: null,
+            labels: {
+              boxWidth: 12,
+              padding: 15,
+              usePointStyle: true,
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                const value = context.raw;
+                const percentage = total
+                  ? ((value / total) * 100).toFixed(1)
+                  : 0;
+                return `${context.label}: ${value} (${percentage}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 }
 
 function startListeningReports() {
@@ -70,8 +140,9 @@ function startListeningReports() {
       }
 
       const reports = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+      querySnapshot.forEach((d) => {
+        const data = d.data();
+        data.docId = d.id; // ✅ store document ID
         if (data.timestamp instanceof Timestamp) {
           data._parsedDate = data.timestamp.toDate();
         } else {
@@ -104,21 +175,20 @@ function displayLatestReport(user) {
 
   const accidentImage = user.imageUrl
     ? `<a href="${user.imageUrl}" target="_blank">
-         <img src="${user.imageUrl}" style="max-width:150px;cursor:pointer;" />
+         <img src="${user.imageUrl}" 
+              style="max-width:160px;border-radius:8px;box-shadow:0 0 6px rgba(0,0,0,0.2);cursor:pointer;" />
        </a>`
     : "N/A";
 
   const annotatedImage = user.annotatedImageUrl
     ? `<a href="${user.annotatedImageUrl}" target="_blank">
          <img src="${user.annotatedImageUrl}" 
-              style="max-width:150px;cursor:pointer;border:2px solid green;" />
+              style="max-width:160px;border:3px solid #198754;border-radius:8px;box-shadow:0 0 6px rgba(0,0,0,0.2);cursor:pointer;" />
        </a>`
     : "N/A";
 
-  // ✅ Normalize severity
   const severity = user.severity ? user.severity.trim().toLowerCase() : "n/a";
 
-  // Handle timestamp
   let timestampStr = "N/A";
   if (user.timestamp) {
     try {
@@ -131,40 +201,49 @@ function displayLatestReport(user) {
     }
   }
 
-  // Generate responders based on severity
   let responders;
   switch (severity) {
     case "severe":
       responders = [
-        { type: "Ambulance", count: 1 },
-        { type: "Police Unit", count: 2 },
-        { type: "Fire Rescue (if needed)", count: 1 },
-        { type: "Traffic Enforcer", count: 2 },
+        { type: "Imus Rescue Ambulance", count: 1 },
+        { type: "PNP Imus Police Unit", count: 2 },
+        { type: "BFP Imus Fire Truck (if fire or entrapment)", count: 1 },
+        {
+          type: "Imus City Traffic Management Office (CTMO) Enforcer",
+          count: 2,
+        },
       ];
       break;
     case "moderate":
       responders = [
-        { type: "Ambulance", count: 1 },
-        { type: "Police Unit", count: 1 },
-        { type: "Traffic Enforcer", count: 1 },
+        { type: "PNP Imus Police Unit", count: 1 },
+        {
+          type: "Imus Rescue Team (for medical check or minor injuries)",
+          count: 1,
+        },
+        { type: "CTMO Traffic Enforcer", count: 1 },
       ];
       break;
     case "minor":
       responders = [
-        { type: "Police Unit", count: 1 },
-        { type: "Traffic Enforcer", count: 1 },
+        { type: "CTMO Traffic Enforcer", count: 1 },
+        { type: "PNP Imus Police Unit (for report filing)", count: 1 },
       ];
       break;
     default:
       responders = [{ type: "⚠️ Not available", count: "N/A" }];
   }
 
-  // Build responder rows
   const responderRows = responders
-    .map((r) => `<tr><td>${r.type}</td><td>${r.count}</td></tr>`)
+    .map(
+      (r) =>
+        `<tr>
+          <td style="padding:6px 8px;">${r.type}</td>
+          <td style="text-align:center;padding:6px 8px;">${r.count}</td>
+        </tr>`
+    )
     .join("");
 
-  // ✅ Determine color based on normalized severity
   const severityColor =
     severity === "severe"
       ? "#dc3545"
@@ -174,81 +253,92 @@ function displayLatestReport(user) {
       ? "#28a745"
       : "#6c757d";
 
-  // Insert final HTML
+  // ✅ Improved table design
   container.innerHTML = `
-    <table class="table table-bordered align-middle">
-      <tbody>
-        <tr>
-          <th>Accident and Annotated</th>
-          <td style="display:flex; gap:10px;">
-            ${accidentImage} ${annotatedImage}
-          </td>
-        </tr>
+    <div style="border:1px solid #dee2e6;border-radius:10px;padding:20px;background:#fff;">
 
-        <!-- SEVERITY (colored text) -->
-        <tr>
-          <th>Severity</th>
-          <td>
-            <span style="font-weight:bold; color:${severityColor}">
-              ${user.severity || "N/A"}
-            </span>
-          </td>
-        </tr>
+      <table class="table table-borderless align-middle" style="width:100%;">
+        <tbody>
+          <tr>
+            <th style="width:220px;">Accident and Annotated</th>
+            <td>
+              <div style="display:flex;gap:12px;align-items:center;">
+                ${accidentImage} ${annotatedImage}
+              </div>
+            </td>
+          </tr>
 
-        <tr><th>Verified by Model</th><td>${
-          user.verifiedByModel ? "✅ Yes" : "❌ No"
-        }</td></tr>
+          <tr>
+            <th>Severity</th>
+            <td>
+              <span style="background-color:${severityColor};
+                           color:#fff;
+                           padding:3px 10px;
+                           border-radius:6px;
+                           font-weight:600;
+                           text-transform:capitalize;">
+                ${user.severity || "N/A"}
+              </span>
+            </td>
+          </tr>
 
-        <tr>
-          <th>Detections</th>
-          <td>${
-            user.detections && user.detections.length > 0
-              ? user.detections
-                  .map(
-                    (d) =>
-                      `Label: <b>${d.label || "N/A"}</b>, Confidence: ${
-                        d.confidence
-                          ? (d.confidence * 100).toFixed(1) + "%"
-                          : "N/A"
-                      }`
-                  )
-                  .join("<br>")
-              : "N/A"
-          }</td>
-        </tr>
+          <tr><th>Verified by Model</th><td>${
+            user.verifiedByModel ? "✅ Yes" : "❌ No"
+          }</td></tr>
 
-        <tr><th>Timestamp</th><td>${timestampStr}</td></tr>
+          <tr>
+            <th>Detections</th>
+            <td>${
+              user.detections && user.detections.length > 0
+                ? user.detections
+                    .map(
+                      (d) =>
+                        `Label: <b>${d.label || "N/A"}</b>, Confidence: ${
+                          d.confidence
+                            ? (d.confidence * 100).toFixed(1) + "%"
+                            : "N/A"
+                        }`
+                    )
+                    .join("<br>")
+                : "N/A"
+            }</td>
+          </tr>
 
-        <tr>
-          <th>Location (Map)</th>
-          <td>${
-            user.latitude && user.longitude
-              ? `<a href="https://www.google.com/maps?q=${user.latitude},${user.longitude}" target="_blank">📍 View on Google Maps</a>`
-              : "N/A"
-          }</td>
-        </tr>
+          <tr><th>Timestamp</th><td>${timestampStr}</td></tr>
 
-        <tr><th>Location</th><td>${user.locationText || "N/A"}</td></tr>
-        <tr>
-          <th>Recommended Emergency Responders</th>
-          <td>
-            <table class="table table-sm table-bordered align-middle mb-0">
-              <thead>
-                <tr style="background-color:#f8f9fa;">
-                  <th>Type</th>
-                  <th>Recommended Number</th>
-                </tr>
-              </thead>
-              <tbody>${responderRows}</tbody>
-            </table>
-          </td>
-        </tr>
-        <tr><th>Phone</th><td>${user.phone || "N/A"}</td></tr>
-        <tr><th>User ID</th><td>${user.userId || "N/A"}</td></tr>
+          <tr>
+            <th>Location (Map)</th>
+            <td>${
+              user.latitude && user.longitude
+                ? `<a href="https://www.google.com/maps?q=${user.latitude},${user.longitude}" target="_blank">
+                     📍 View on Google Maps
+                   </a>`
+                : "N/A"
+            }</td>
+          </tr>
 
-        
-      </tbody>
-    </table>
+          <tr><th>Location</th><td>${user.locationText || "N/A"}</td></tr>
+
+          <tr>
+            <th>Recommended Emergency Responders</th>
+            <td>
+              <table style="width:100%;border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
+                <thead style="background-color:#f8f9fa;">
+                  <tr>
+                    <th style="padding:6px 8px;text-align:left;">Type</th>
+                    <th style="padding:6px 8px;text-align:center;">Recommended #</th>
+                  </tr>
+                </thead>
+                <tbody>${responderRows}</tbody>
+              </table>
+            </td>
+          </tr>
+
+          <tr><th>Phone</th><td>${user.phone || "N/A"}</td></tr>
+          <tr><th>User ID</th><td><code>${user.userId || "N/A"}</code></td></tr>
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -265,9 +355,10 @@ function renderReports(reports) {
   container.innerHTML = `<div class="accordion" id="monthAccordion"></div>`;
   const accordion = document.getElementById("monthAccordion");
 
+  // ✅ Group reports by month
   const grouped = {};
   reports.forEach((report) => {
-    const date = report._parsedDate;
+    const date = report._parsedDate || new Date(report.timestamp);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
       2,
       "0"
@@ -276,6 +367,7 @@ function renderReports(reports) {
     grouped[key].push(report);
   });
 
+  // ✅ Render accordion per month
   Object.keys(grouped)
     .sort((a, b) => b.localeCompare(a))
     .forEach((monthKey, idx) => {
@@ -285,66 +377,204 @@ function renderReports(reports) {
         year: "numeric",
       });
 
-      // 🔄 Carousel for accidents in this month
       const carouselId = `carousel-${monthKey}`;
+
+      // ✅ Build all reports inside this month
       const reportsHTML = grouped[monthKey]
         .map((r, i) => {
-          const img = r.imageUrl
+          // Normalize severity
+          const severity = r.severity ? r.severity.trim().toLowerCase() : "n/a";
+          const severityColor =
+            severity === "severe"
+              ? "#dc3545"
+              : severity === "moderate"
+              ? "#ffc107"
+              : severity === "minor"
+              ? "#28a745"
+              : "#6c757d";
+
+          // ✅ Imus-based responders
+          let responders;
+          switch (severity) {
+            case "severe":
+              responders = [
+                { type: "Imus Rescue Ambulance", count: 1 },
+                { type: "PNP Imus Police Unit", count: 2 },
+                {
+                  type: "BFP Imus Fire Truck (if fire or entrapment)",
+                  count: 1,
+                },
+                {
+                  type: "Imus City Traffic Management Office (CTMO) Enforcer",
+                  count: 2,
+                },
+              ];
+              break;
+            case "moderate":
+              responders = [
+                { type: "PNP Imus Police Unit", count: 1 },
+                {
+                  type: "Imus Rescue Team (for medical check or minor injuries)",
+                  count: 1,
+                },
+                { type: "CTMO Traffic Enforcer", count: 1 },
+              ];
+              break;
+            case "minor":
+              responders = [
+                { type: "CTMO Traffic Enforcer", count: 1 },
+                { type: "PNP Imus Police Unit (for report filing)", count: 1 },
+              ];
+              break;
+            default:
+              responders = [{ type: "⚠️ Not available", count: "N/A" }];
+          }
+
+          const responderRows = responders
+            .map(
+              (r) =>
+                `<tr>
+                   <td style="padding:6px 8px;">${r.type}</td>
+                   <td style="text-align:center;padding:6px 8px;">${r.count}</td>
+                 </tr>`
+            )
+            .join("");
+
+          // ✅ Handle timestamps safely
+          let timestampStr = "N/A";
+          if (r.timestamp) {
+            try {
+              const date = new Date(r.timestamp);
+              timestampStr = isNaN(date.getTime())
+                ? r.timestamp
+                : date.toLocaleString();
+            } catch {
+              timestampStr = r.timestamp;
+            }
+          }
+
+          // ✅ Image previews
+          const accidentImage = r.imageUrl
             ? `<a href="${r.imageUrl}" target="_blank">
-          <img src="${r.imageUrl}" class="d-block mx-auto" style="max-height:300px; object-fit:contain;" />
-        </a>`
+                 <img src="${r.imageUrl}" 
+                      style="max-width:160px;border-radius:8px;box-shadow:0 0 6px rgba(0,0,0,0.2);cursor:pointer;" />
+               </a>`
             : "N/A";
 
+          const annotatedImage = r.annotatedImageUrl
+            ? `<a href="${r.annotatedImageUrl}" target="_blank">
+                 <img src="${r.annotatedImageUrl}" 
+                      style="max-width:160px;border:3px solid #198754;border-radius:8px;box-shadow:0 0 6px rgba(0,0,0,0.2);cursor:pointer;" />
+               </a>`
+            : "N/A";
+
+          // ✅ Detections list
           const detectionsHTML =
             r.detections && r.detections.length > 0
               ? r.detections
                   .map(
                     (d) =>
-                      `Label: <b>${d.label}</b>, Confidence: ${(
-                        d.confidence * 100
-                      ).toFixed(1)}%`
+                      `Label: <b>${d.label || "N/A"}</b>, Confidence: ${
+                        d.confidence
+                          ? (d.confidence * 100).toFixed(1) + "%"
+                          : "N/A"
+                      }`
                   )
                   .join("<br>")
               : "N/A";
 
+          // ✅ Final table per report
           return `
-      <div class="carousel-item ${i === 0 ? "active" : ""}">
-        <div class="p-3">
-          <h5>Report ${i + 1}</h5>
-          <table class="table table-bordered mt-2">
-            <tbody>
-              <tr><th>Accident Image</th><td>${img}</td></tr>
-              <tr><th>Annotated Image</th><td>${
-                r.annotatedImageUrl
-                  ? `<a href="${r.annotatedImageUrl}" target="_blank"><img src="${r.annotatedImageUrl}" style="max-width:120px;border:2px solid green;" /></a>`
-                  : "N/A"
-              }</td></tr>
+            <div class="carousel-item ${i === 0 ? "active" : ""}">
+              <div class="p-3">
+                <div style="border:1px solid #dee2e6;border-radius:10px;padding:20px;background:#fff;">
+                  <h5 style="margin-bottom:10px;">Report ${i + 1}</h5>
+                  <table class="table table-borderless align-middle" style="width:100%;">
+                    <tbody>
+                      <tr>
+                        <th style="width:220px;">Accident and Annotated</th>
+                        <td>
+                          <div style="display:flex;gap:12px;align-items:center;">
+                            ${accidentImage} ${annotatedImage}
+                          </div>
+                        </td>
+                      </tr>
 
-              <tr><th>Timestamp</th><td>${r._parsedDate.toLocaleString()}</td></tr>
-              <tr>
-                <th>Location (Map)</th>
-                <td>${
-                  r.latitude && r.longitude
-                    ? `<a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}" target="_blank">📍 View on Google Maps</a>`
-                    : "N/A"
-                }</td>
-              </tr>
-              <tr><th>Location</th><td>${r.locationText || "N/A"}</td></tr>
-              <tr><th>Phone</th><td>${r.phone || "N/A"}</td></tr>
-              <tr><th>Email</th><td>${r.email || "N/A"}</td></tr>
-              <tr><th>User ID</th><td>${r.userId || "N/A"}</td></tr>
-              <tr><th>Verified by Model</th><td>${
-                r.verifiedByModel ? "✅ Yes" : "❌ No"
-              }</td></tr>
-              <tr><th>Detections</th><td>${detectionsHTML}</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+                      <tr>
+                        <th>Severity</th>
+                        <td>
+                          <span style="background-color:${severityColor};
+                                       color:#fff;
+                                       padding:3px 10px;
+                                       border-radius:6px;
+                                       font-weight:600;
+                                       text-transform:capitalize;">
+                            ${r.severity || "N/A"}
+                          </span>
+                        </td>
+                      </tr>
+
+                      <tr><th>Verified by Model</th><td>${
+                        r.verifiedByModel ? "✅ Yes" : "❌ No"
+                      }</td></tr>
+
+                      <tr><th>Detections</th><td>${detectionsHTML}</td></tr>
+                      <tr><th>Timestamp</th><td>${timestampStr}</td></tr>
+
+                      <tr>
+                        <th>Location (Map)</th>
+                        <td>${
+                          r.latitude && r.longitude
+                            ? `<a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}" target="_blank">
+                                 📍 View on Google Maps
+                               </a>`
+                            : "N/A"
+                        }</td>
+                      </tr>
+
+                      <tr><th>Location</th><td>${
+                        r.locationText || "N/A"
+                      }</td></tr>
+
+                      <tr>
+                        <th>Recommended Emergency Responders</th>
+                        <td>
+                          <table style="width:100%;border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
+                            <thead style="background-color:#f8f9fa;">
+                              <tr>
+                                <th style="padding:6px 8px;text-align:left;">Type</th>
+                                <th style="padding:6px 8px;text-align:center;">Recommended #</th>
+                              </tr>
+                            </thead>
+                            <tbody>${responderRows}</tbody>
+                          </table>
+                        </td>
+                      </tr>
+
+                      <tr><th>Phone</th><td>${r.phone || "N/A"}</td></tr>
+                      <tr><th>Email</th><td>${r.email || "N/A"}</td></tr>
+                      <tr><th>User ID</th><td><code>${
+                        r.userId || "N/A"
+                      }</code></td></tr>
+                        </tbody>
+                </table>
+
+                <!-- 🗑️ Delete button -->
+                <div style="display: flex; justify-content: center; margin-top: 10px;">
+                  <button class="btn btn-sm btn-danger delete-report-btn" data-id="${
+                    r.docId
+                  }">
+                    Delete Report
+                  </button>
+                </div>
+                </div>
+                </div>
+                </div>
+`;
         })
         .join("");
 
+      // ✅ Append accordion item
       accordion.innerHTML += `
         <div class="accordion-item">
           <h2 class="accordion-header">
@@ -359,9 +589,7 @@ function renderReports(reports) {
       }">
             <div class="accordion-body">
               <div id="${carouselId}" class="carousel slide" data-bs-ride="carousel">
-                <div class="carousel-inner">
-                  ${reportsHTML}
-                </div>
+                <div class="carousel-inner">${reportsHTML}</div>
                 <button class="carousel-control-prev" type="button" data-bs-target="#${carouselId}" data-bs-slide="prev">
                   <span class="carousel-control-prev-icon" aria-hidden="true"></span>
                   <span class="visually-hidden">Previous</span>
@@ -375,6 +603,16 @@ function renderReports(reports) {
           </div>
         </div>`;
     });
+
+  // attach delete button event listeners
+  setTimeout(() => {
+    document.querySelectorAll(".delete-report-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const docId = e.target.getAttribute("data-id");
+        if (docId) deleteReport(docId);
+      });
+    });
+  }, 300);
 }
 
 if (!document.getElementById("carousel-style")) {
@@ -391,19 +629,29 @@ if (!document.getElementById("carousel-style")) {
   document.head.appendChild(style);
 }
 
-async function simulateNewReport() {
-  const usersRef = collection(db, "default");
-  await addDoc(usersRef, {
-    timestamp: serverTimestamp(),
-    locationText: "🚨 Simulated Accident Site",
-    phone: "+639123456789",
-    email: "simulation@test.com",
-    userId: "testUser123",
-    imageUrl: "https://placehold.co/600x400?text=Simulated+Accident",
-    verifiedByModel: false,
-  });
-  console.log("✅ Simulated report added!");
-}
+// Use event delegation — attach one listener to a parent container
+document.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("delete-report-btn")) {
+    const docId = e.target.getAttribute("data-id");
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this report? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "default", docId));
+      alert("✅ Report successfully deleted.");
+      e.target.closest(".report-card")?.remove(); // optional: remove from UI
+    } catch (err) {
+      console.error("Error deleting report:", err);
+      alert("❌ Failed to delete report. Check console for details.");
+    }
+  }
+});
 
 // DOM ready
 document.addEventListener("DOMContentLoaded", () => {

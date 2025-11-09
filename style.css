@@ -44,3 +44,6 @@ body {
 .chartjs-render-monitor {
   margin: 0 auto;
 }
+body {
+  display: none;
+}

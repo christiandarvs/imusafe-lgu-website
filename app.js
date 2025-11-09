@@ -37,6 +37,7 @@ onAuthStateChanged(auth, (user) => {
     window.location.replace("login.html");
   } else {
     console.log("✅ Authorized — starting listener");
+    document.body.style.display = "block";
     startListeningReports();
   }
 });
